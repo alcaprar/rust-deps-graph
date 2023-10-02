@@ -1,0 +1,1 @@
+docker run -p7474:7474 -p7687:7687 -e NEO4J_AUTH=neo4j/VeryLongPhrase1! neo4j:5.10
