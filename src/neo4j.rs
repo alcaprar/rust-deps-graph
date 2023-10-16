@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use neo4rs::{query, ConfigBuilder, Graph};
 
 pub struct Neo4j {
@@ -22,7 +23,21 @@ impl Neo4j {
         let client = Graph::connect(config)
             .await
             .expect("Error when connecting to the graph");
+
         Self { client }
+    }
+
+    pub async fn health_check(&self) -> Result<(), anyhow::Error> {
+        let statement = query("MATCH (p: Person) RETURN p LIMIT 1;");
+        self.client.run(statement).await.map_err(|error| {
+            anyhow!(
+                "Error when running simple query for health check: {}",
+                error
+            )
+        })?;
+
+        tracing::debug!("Neo4j is running.");
+        Ok(())
     }
 
     pub fn client(&self) -> &Graph {
@@ -37,7 +52,7 @@ pub struct Package {
 
 impl Package {
     pub async fn store(&self, graph: &Graph) -> Result<(), anyhow::Error> {
-        println!("Storing '{}|{}'", self.repository, self.name);
+        tracing::debug!("Storing '{}|{}'", self.repository, self.name);
         let statement = query("CREATE (n:Package { name: $name, repository: $repository })")
             .param("name", self.name.clone())
             .param("repository", self.repository.clone());
@@ -64,10 +79,10 @@ pub struct Dependency {
 
 impl Dependency {
     pub fn new(name: String, version: String, used_by: String, registry: String) -> Self {
-        println!("version: {}", version);
-        let version = version.replace("~", "");
-        let version = version.replace("=", "");
-        let version_splitted: Vec<&str> = version.split(".").collect();
+        tracing::debug!("version: {}", version);
+        let version = version.replace('~', "");
+        let version = version.replace('=', "");
+        let version_splitted: Vec<&str> = version.split('.').collect();
         let major = version_splitted[0].to_string();
         let minor = if version_splitted.len() > 1 {
             version_splitted[1].to_string()
@@ -99,7 +114,7 @@ impl Dependency {
             .await
             .expect("Error when creating the package");
 
-        println!("{:?}", self);
+        tracing::debug!("{:?}", self);
 
         let create_relation_statement = query("match (a:Package), (b:Package) where a.name = $aname AND b.name = $bname create (a)-[r:Dependency{version: $version, major: $major, minor: $minor, patch: $patch, registry: $registry}]->(b)")
         .param("aname", self.used_by.clone())

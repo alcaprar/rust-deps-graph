@@ -5,29 +5,37 @@ use std::{thread, time};
 pub struct GithubClient {
     octocrab: Octocrab,
     token: String,
+    organization: String,
 }
 
 impl GithubClient {
-    pub fn new(token: String) -> Result<Self, anyhow::Error> {
+    pub fn new(token: String, organization: String) -> Result<Self, anyhow::Error> {
         let octocrab = Octocrab::builder().personal_token(token.clone()).build()?;
 
-        Ok(Self { octocrab, token })
+        Ok(Self {
+            octocrab,
+            token,
+            organization,
+        })
     }
 
     pub async fn get_all_toml_paths_in_organization(
         &self,
-        organization: &str,
+        specific_package: &str,
     ) -> Result<Vec<CargoTomlPath>, anyhow::Error> {
         let mut page: u32 = 1;
-        let per_page = 100;
+        let per_page = 50;
         let mut has_next = true;
 
-        let query = format!("[dependencies] filename:Cargo.toml org:{}", organization);
+        let query = format!(
+            "[dependencies] {} filename:Cargo.toml org:{}",
+            specific_package, self.organization
+        );
 
         let mut vector_result: Vec<CargoTomlPath> = Vec::new();
 
         while has_next {
-            println!("page '{}'", page);
+            tracing::debug!("page '{}'", page);
             let results = self
                 .octocrab
                 .search()
@@ -37,37 +45,34 @@ impl GithubClient {
                 .send()
                 .await
                 .map_err(|err| {
-                    println!("Error when calling github api '{}'", err);
+                    tracing::error!("Error when calling github api '{}'", err);
                     err
                 })?;
 
             for result in results.clone().into_iter() {
                 vector_result.push(CargoTomlPath {
-                    organization: organization.to_string(),
+                    organization: self.organization.to_string(),
                     repo: result.repository.name,
                     path: result.path,
                 })
             }
 
             if results.next.is_some() {
-                page = page + 1;
+                page += 1;
                 thread::sleep(time::Duration::from_secs(10));
             } else {
                 has_next = false;
             }
+
+            has_next = false;
         }
         Ok(vector_result)
     }
 
-    pub async fn get_file_content(
-        &self,
-        organization: &str,
-        repo: &str,
-        path: &str,
-    ) -> Result<String, anyhow::Error> {
+    pub async fn get_file_content(&self, repo: &str, path: &str) -> Result<String, anyhow::Error> {
         let file_url = format!(
             "https://api.github.com/repos/{}/{}/contents/{}",
-            organization, repo, path
+            self.organization, repo, path
         );
 
         let client = reqwest::Client::new();

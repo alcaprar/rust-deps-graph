@@ -6,7 +6,6 @@ use toml_edit::{Document, Item, Value};
 #[derive(Debug, Clone)]
 pub struct CargoToml {
     raw_content: String,
-    parsed: Document,
     repository_name: String,
     name: String,
     dependencies: Vec<(String, String, String)>,
@@ -37,14 +36,13 @@ impl CargoToml {
             .map_err(|_error| anyhow::anyhow!("Error when parsing the toml."))?;
 
         let name = match Self::get_name_from_item(&parsed["package"]) {
-            Some(name) => name.trim().replace("\"", ""),
+            Some(name) => name.trim().replace('\"', ""),
             None => return Err(anyhow::anyhow!("name not found in the package")),
         };
         let dependencies = Self::get_dependencies_from_item(&parsed["dependencies"]);
 
         Ok(Self {
             raw_content,
-            parsed,
             name,
             dependencies,
             versions_used: HashSet::new(),
@@ -55,8 +53,8 @@ impl CargoToml {
     pub fn get_id(&self) -> String {
         format!(
             "{}_{}",
-            self.get_name().replace("-", "_"),
-            self.get_repository_name().replace("-", "_")
+            self.get_name().replace('-', "_"),
+            self.get_repository_name().replace('-', "_")
         )
     }
 
@@ -93,12 +91,13 @@ impl CargoToml {
 
         for dep in dependencies.iter() {
             let dep_name = dep.0;
+            tracing::debug!("get_dependencies_from_item dep.1: {:?}", dep.1);
             let version = match Self::get_version_from_item(dep.1) {
-                Some(version) => version.trim().replace("\"", ""),
+                Some(version) => version.trim().replace('\"', ""),
                 None => continue,
             };
             let registry = match Self::get_registry_from_item(dep.1) {
-                Some(registry) => registry.trim().replace("\"", ""),
+                Some(registry) => registry.trim().replace('\"', ""),
                 None => "".to_string(),
             };
 
@@ -111,10 +110,7 @@ impl CargoToml {
     fn get_name_from_item(package_item: &Item) -> Option<String> {
         match package_item.as_table() {
             Some(table) => match table.get("name") {
-                Some(item) => match item.as_value() {
-                    Some(value) => Some(value.to_string()),
-                    None => None,
-                },
+                Some(item) => item.as_value().map(|value| value.to_string()),
                 None => None,
             },
             None => None,
@@ -125,10 +121,9 @@ impl CargoToml {
         match item {
             Item::Value(value) => match value {
                 Value::String(value) => Some(value.to_string()),
-                Value::InlineTable(table) => match table.get("version") {
-                    Some(version) => Some(version.to_string()),
-                    None => None,
-                },
+                Value::InlineTable(table) => {
+                    table.get("version").map(|version| version.to_string())
+                }
                 Value::Integer(_)
                 | Value::Float(_)
                 | Value::Boolean(_)
@@ -142,10 +137,9 @@ impl CargoToml {
     fn get_registry_from_item(item: &Item) -> Option<String> {
         match item {
             Item::Value(value) => match value {
-                Value::InlineTable(table) => match table.get("registry") {
-                    Some(registry) => Some(registry.to_string()),
-                    None => None,
-                },
+                Value::InlineTable(table) => {
+                    table.get("registry").map(|registry| registry.to_string())
+                }
                 Value::String(_)
                 | Value::Integer(_)
                 | Value::Float(_)

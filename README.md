@@ -2,6 +2,17 @@
 
 This 
 
+## How to use this script
+
+```bash
+# Start neo4j
+./scripts/start_neo4j.rs
+
+# Run the script
+# Beware it can take a lot :)
+cargo run -- --github-token GITHUB_TOKEN --organization TrueLayer
+```
+
 ## How to query the results
 
 Show all nodes:
